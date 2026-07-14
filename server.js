@@ -1,0 +1,18 @@
+    import express from "express";
+    import fetch from "node-fetch";
+    import cors from "cors";
+    import { createClient } from '@supabase/supabase-js';
+    import bcrypt from 'bcrypt';
+    import { v4 as uuidv4 } from 'uuid';
+    import dotenv from "dotenv";
+    dotenv.config();
+    const app = express();
+    app.use(cors()); app.use(express.json({limit: '20mb'}));
+    const DEEPSEEK_KEY = process.env.DEEPSEEK_KEY;
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+    app.post("/api/register", async (req, res) => {const { email, password } = req.body; const hash = await bcrypt.hash(password, 10); const { error } = await supabase.from('users').insert({ id: uuidv4(), email, password: hash }); error? res.status(400).json({error: error.message}) : res.json({success: true});});
+    app.post("/api/login", async (req, res) => {const { email, password } = req.body; const { data } = await supabase.from('users').select('*').eq('email', email).single(); if(!data) return res.status(400).json({error: "Email tidak terdaftar"}); const valid = await bcrypt.compare(password, data.password); valid? res.json({user_id: data.id}) : res.status(400).json({error: "Password salah"});});
+    app.get("/api/chats/:user_id", async (req, res) => {const { data } = await supabase.from('chats').select('*').eq('user_id', req.params.user_id).order('created_at', {ascending: false}); res.json(data || []);});
+    app.post("/api/save", async (req, res) => {const { id, user_id, title, history, file } = req.body; await supabase.from('chats').upsert({ id, user_id, title, history, file, created_at: new Date() }); res.json({success: true});});
+    app.post("/api/chat", async (req, res) => {const response = await fetch("https://api.deepseek.com/chat/completions", {method: "POST", headers: {"Authorization": `Bearer ${DEEPSEEK_KEY}`, "Content-Type": "application/json"}, body: JSON.stringify(req.body)}); res.json(await response.json());});
+    app.listen(process.env.PORT || 3000, () => console.log("✅ KEYWORD AI Server Jalan"));
